@@ -2,7 +2,7 @@ package org.sinytra.connector.transformer.jar;
 
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.*;
 import org.sinytra.connector.transformer.TransformerEnvironment;
 import org.sinytra.connector.transformer.transform.TransformerUtil;
 import org.sinytra.adapter.patch.fixes.BytecodeFixerUpper;
@@ -18,23 +18,73 @@ import java.util.jar.Attributes;
 
 public class BytecodeFixerUpperFrontend {
     private static final List<TypeAdapter> FIELD_TYPE_ADAPTERS = List.of(
-        new SimpleTypeAdapter(Type.getObjectType("net/minecraft/core/Holder$Reference"), Type.getObjectType("java/lang/Object"), (list, insn) ->
-            list.insert(insn, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/core/Holder$Reference", "value", "()Ljava/lang/Object;"))),
-        new SimpleTypeAdapter(Type.getObjectType("net/minecraft/resources/ResourceLocation"), Type.getObjectType("java/lang/String"), (list, insn) ->
-            list.insert(insn, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/resources/ResourceLocation", "toString", "()Ljava/lang/String;"))),
-        new SimpleTypeAdapter(Type.getObjectType("net/minecraft/world/item/ItemStack"), Type.getObjectType("net/minecraft/world/item/Item"), (list, insn) ->
-            list.insert(insn, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/world/item/ItemStack", "getItem", "()Lnet/minecraft/world/item/Item;"))),
-//        new SimpleTypeAdapter(Type.getObjectType("java/util/List"), Type.getType("[Lnet/minecraft/world/level/storage/loot/LootPool;"), (list, insn) -> {
-//            list.insert(insn, ASMAPI.listOf(
-//                new InsnNode(Opcodes.ICONST_0),
-//                new TypeInsnNode(Opcodes.ANEWARRAY, "net/minecraft/world/level/storage/loot/LootPool"),
-//                new MethodInsnNode(Opcodes.INVOKEINTERFACE, "java/util/List", "toArray", "([Ljava/lang/Object;)[Ljava/lang/Object;", true),
-//                new TypeInsnNode(Opcodes.CHECKCAST, "[Lnet/minecraft/world/level/storage/loot/LootPool;")
-//            ));
-//        }),
-        new SimpleTypeAdapter(Type.getObjectType("net/minecraft/world/entity/Mob"), Type.getObjectType("net/minecraft/world/entity/monster/Monster"), (list, insn) -> {})
-//        new SimpleTypeAdapter(Type.getObjectType("net/minecraft/world/item/enchantment/Enchantment"), Type.getObjectType("net/minecraft/world/item/enchantment/EnchantmentCategory"), (list, insn) ->
-//            list.insert(insn, new FieldInsnNode(Opcodes.GETFIELD, "net/minecraft/world/item/enchantment/Enchantment", ASMAPI.mapField("f_44672_"), "Lnet/minecraft/world/item/enchantment/EnchantmentCategory;")))
+        // 更新 Holder.Reference 转换器：处理 Optional 返回值
+        new SimpleTypeAdapter(
+            Type.getObjectType("net/minecraft/core/Holder$Reference"), 
+            Type.getObjectType("java/lang/Object"), 
+            (list, insn) -> {
+                // 插入方法调用链：value().orElse(null)
+                list.insert(insn, new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL, 
+                    "net/minecraft/core/Holder$Reference", 
+                    "value", 
+                    "()Ljava/util/Optional;"
+                ));
+                list.insert(insn, new InsnNode(Opcodes.ACONST_NULL)); // 压入 null 作为默认值
+                list.insert(insn, new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL, 
+                    "java/util/Optional", 
+                    "orElse", 
+                    "(Ljava/lang/Object;)Ljava/lang/Object;"
+                ));
+            }
+        ),
+        
+        // ResourceLocation 转换器保持不变
+        new SimpleTypeAdapter(
+            Type.getObjectType("net/minecraft/resources/ResourceLocation"), 
+            Type.getObjectType("java/lang/String"), 
+            (list, insn) -> list.insert(insn, new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL, 
+                "net/minecraft/resources/ResourceLocation", 
+                "toString", 
+                "()Ljava/lang/String;"
+            ))
+        ),
+        
+        // 更新 ItemStack 转换器：使用 Data Components API
+        new SimpleTypeAdapter(
+            Type.getObjectType("net/minecraft/world/item/ItemStack"), 
+            Type.getObjectType("net/minecraft/world/item/Item"), 
+            (list, insn) -> {
+                // 插入 DataComponents.ITEM 静态字段访问
+                list.insert(insn, new FieldInsnNode(
+                    Opcodes.GETSTATIC,
+                    "net/minecraft/core/component/DataComponents",
+                    "ITEM",
+                    "Lnet/minecraft/core/component/DataComponentType;"
+                ));
+                // 调用 get() 方法获取组件值
+                list.insert(insn, new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL, 
+                    "net/minecraft/world/item/ItemStack", 
+                    "get", 
+                    "(Lnet/minecraft/core/component/DataComponentType;)Ljava/lang/Object;"
+                ));
+                // 添加类型转换确保返回 Item 类型
+                list.insert(insn, new TypeInsnNode(
+                    Opcodes.CHECKCAST, 
+                    "net/minecraft/world/item/Item"
+                ));
+            }
+        ),
+        
+        // 其他转换器保持不变
+        new SimpleTypeAdapter(
+            Type.getObjectType("net/minecraft/world/entity/Mob"), 
+            Type.getObjectType("net/minecraft/world/entity/monster/Monster"), 
+            (list, insn) -> {}
+        )
     );
 
     private final BytecodeFixerUpper bfu;
