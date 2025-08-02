@@ -1,4 +1,3 @@
-检查这一段里面有没有要修改的部分：
 package org.sinytra.connector.transformer.jar;
 
 import org.objectweb.asm.Opcodes;
