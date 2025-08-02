@@ -145,9 +145,6 @@ dependencies {
     "modCompileOnly"(sourceSets.main.get().output)
 
     implementation("curse.maven:connector-extras-913445:5618470")
-    implementation 'org.ow2.asm:asm:9.7' // 显式声明 ASM 9.7
-    implementation 'org.ow2.asm:asm-tree:9.7'
-    implementation 'net.neoforged:neoforge:21.6.20-beta' // 确保版本一致
 }
 
 val modJar: Jar by tasks.creating(Jar::class) {
