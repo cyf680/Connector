@@ -169,7 +169,6 @@ val depsJar: ShadowJar by tasks.creating(ShadowJar::class) {
     exclude("LICENSE.txt")
 
     dependencies {
-        exclude(dependency("org.ow2.asm:"))
         exclude(dependency("net.sf.jopt-simple:"))
         exclude(dependency("com.google.guava:guava"))
         exclude(dependency("com.google.code.gson:gson"))
