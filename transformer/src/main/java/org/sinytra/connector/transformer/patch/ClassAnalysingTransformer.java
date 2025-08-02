@@ -11,12 +11,22 @@ import org.sinytra.adapter.patch.util.MethodQualifier;
 import java.util.Map;
 
 public class ClassAnalysingTransformer implements ClassNodeTransformer.ClassProcessor {
+    // 更新方法替换规则以适应 1.21.6 的配置系统变化
     private static final Map<MethodQualifier, MethodQualifier> REPLACEMENTS = Map.of(
+        // 保持 Class.getResourceAsStream 替换不变
         new MethodQualifier("Ljava/lang/Class;", "getResourceAsStream", "(Ljava/lang/String;)Ljava/io/InputStream;"),
         new MethodQualifier("org/sinytra/connector/mod/ConnectorMod", "getModResourceAsStream", "(Ljava/lang/Class;Ljava/lang/String;)Ljava/io/InputStream;"),
 
-        new MethodQualifier("Lcom/electronwill/nightconfig/core/file/FileConfigBuilder;", "defaultResource", "(Ljava/lang/String;)Lcom/electronwill/nightconfig/core/file/GenericBuilder;"),
-        new MethodQualifier("org/sinytra/connector/mod/ConnectorMod", "useModConfigResource", "(Lcom/electronwill/nightconfig/core/file/FileConfigBuilder;Ljava/lang/String;)Lcom/electronwill/nightconfig/core/file/GenericBuilder;")
+        // 更新 NightConfig 相关方法替换
+        new MethodQualifier("Lnet/neoforged/neoforge/common/NightConfigFileConfigBuilder;", "defaultResource", "(Ljava/lang/String;)Lnet/neoforged/neoforge/common/NightConfigFileConfigBuilder$GenericBuilder;"),
+        new MethodQualifier("org/sinytra/connector/mod/ConnectorMod", "useModConfigResource", "(Lnet/neoforged/neoforge/common/NightConfigFileConfigBuilder;Ljava/lang/String;)Lnet/neoforged/neoforge/common/NightConfigFileConfigBuilder$GenericBuilder;"),
+        
+        // 添加组件系统相关的方法替换
+        new MethodQualifier("Lnet/minecraft/world/item/ItemStack;", "getItem", "()Lnet/minecraft/world/item/Item;"),
+        new MethodQualifier("org/sinytra/connector/mod/ConnectorMod", "getItemComponent", "(Lnet/minecraft/world/item/ItemStack;)Lnet/minecraft/world/item/Item;"),
+        
+        new MethodQualifier("Lnet/minecraft/core/Holder$Reference;", "value", "()Ljava/lang/Object;"),
+        new MethodQualifier("org/sinytra/connector/mod/ConnectorMod", "getHolderValue", "(Lnet/minecraft/core/Holder$Reference;)Ljava/lang/Object;")
     );
 
     @Override
@@ -28,7 +38,24 @@ public class ClassAnalysingTransformer implements ClassNodeTransformer.ClassProc
                     for (Map.Entry<MethodQualifier, MethodQualifier> entry : REPLACEMENTS.entrySet()) {
                         if (entry.getKey().matches(minsn)) {
                             MethodQualifier replacement = entry.getValue();
-                            method.instructions.set(insn, new MethodInsnNode(Opcodes.INVOKESTATIC, replacement.owner(), replacement.name(), replacement.desc(), false));
+                            // 添加组件系统方法的特殊处理
+                            if (replacement.name().contains("Component")) {
+                                method.instructions.insertBefore(insn, new MethodInsnNode(
+                                    Opcodes.GETSTATIC,
+                                    "net/minecraft/core/component/DataComponents",
+                                    "ITEM",
+                                    "Lnet/minecraft/core/component/DataComponentType;"
+                                ));
+                            }
+                            
+                            method.instructions.set(insn, new MethodInsnNode(
+                                Opcodes.INVOKESTATIC, 
+                                replacement.owner(), 
+                                replacement.name(), 
+                                replacement.desc(), 
+                                false
+                            ));
+                            
                             applied = true;
                         }
                     }
